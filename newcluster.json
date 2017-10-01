@@ -1,0 +1,7 @@
+{
+"cluster_name": "dev",
+"crawlerinitandconfig_branch": "master",
+"crawlerwaitonhold_branch": "master",
+"crawlerapi_branch": "master",
+"crawlerws_branch": "master"
+}

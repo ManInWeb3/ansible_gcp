@@ -1,0 +1,57 @@
+---
+- name: Create Compute Engine instances
+  hosts: localhost
+  gather_facts: False
+  vars_files:
+    - ./vars/gce_auth
+    - ./vars/ssh
+  tasks:
+    - name: Bring up the instances in the first zone
+      gce:
+        instance_names: '{{ cluster_name ~ "-crawler"}}'
+        zone: us-central1-a
+        machine_type: n1-standard-1
+        image: visumenudefaultimage
+        state: present
+        project_id: "{{ project_id }}"
+        credentials_file: "{{ credentials_file }}"
+        service_account_email: "{{ service_account_email }}"
+        disk_size: 20
+        tags: ["http-server", "https-server", "asterisk"]
+      register: gce
+
+  post_tasks:
+    - name: Save host data
+      add_host:
+        hostname: "{{ item.public_ip }}"
+        ansible_ssh_host: "{{ item.public_ip }}"
+        groupname: gce_instances_ips
+      with_items: "{{ gce.instance_data }}"
+
+    - name: Add DNS records "{{ cluster_name }}"
+      gcdns_record:
+        project_id: "{{ project_id }}"
+        credentials_file: "{{ credentials_file }}"
+        service_account_email: "{{ service_account_email }}"
+        record: "{{cluster_name}}{{item[1]}}"
+        zone: 'visumenu.com'
+        type: A
+        overwrite: true
+        value: "{{ item[0].public_ip }}"
+      with_nested:
+        - "{{ gce.instance_data }}"
+        - [ '-crawler.vm.com', '-crawlerapi.vm.com', '-ws.vm.com' ]
+
+    - name: Remove new host key from known host
+      local_action: "shell ssh-keygen -f '/root/.ssh/known_hosts' -R {{ item.public_ip }}"
+      with_items: "{{ gce.instance_data }}"
+
+
+    - name: Wait for SSH for instances
+      wait_for:
+        delay: 1
+        host: "{{ item.public_ip }}"
+        port: 22
+        state: started
+        timeout: 90
+      with_items: "{{ gce.instance_data }}"

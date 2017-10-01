@@ -1,0 +1,101 @@
+---
+- name: Install and configure CrawlerAPI (SLIM application)
+  hosts: gce_instances_ips
+  gather_facts: False
+  become: yes
+  become_method: sudo
+  vars:
+    host_public_ip: "{{hostvars[inventory_hostname]['ansible_ssh_host']}}"
+    crawlerapi_path: /var/www/crawlerapi
+  vars_files:
+    - ./vars/ssh
+    - ./vars/vm
+  tasks:
+
+    - copy: src=/home/ANSIBLE/.ssh/id_rsa dest=/home/ansible/.ssh/id_rsa
+        owner=ansible group=ansible mode=0600
+
+# ---- Clone and install CrawlerAPI -------
+    - file:
+        path: "{{crawlerapi_path}}"
+        state: directory
+        mode: 0777
+
+    - name: Clone CrawlerAPI repository
+      git:
+        repo: "{{git_crawlerapi}}"
+        dest: "{{crawlerapi_path}}"
+        update: yes
+        force: yes
+        version: "{{ crawlerapi_branch }}"
+        key_file: /home/ansible/.ssh/id_rsa
+        accept_hostkey: yes
+
+    - name     : fetch template from single remote host
+      fetch    :
+        src: "{{crawlerapi_path}}/etc_templates/apache2/sites-available/crawlerapi.conf.j2"
+        dest            : /tmp/crawlerapi.conf.j2
+        flat            : yes
+        fail_on_missing : yes
+
+    - name     : template remote hosts
+      template :
+        src   : /tmp/crawlerapi.conf.j2
+        dest  : /etc/apache2/sites-available/crawlerapi.conf
+        owner : root
+        group : root
+
+    - name     : fetch template TokenAuth
+      fetch    :
+        src: "{{crawlerapi_path}}/webroot/public/middleware/TokenAuth.php.j2"
+        dest            : /tmp/TokenAuth.php.j2
+        flat            : yes
+        fail_on_missing : yes
+
+    - name     : template remote hosts
+      template :
+        src   : /tmp/TokenAuth.php.j2
+        dest  : "{{crawlerapi_path}}/webroot/public/middleware/TokenAuth.php"
+        owner : root
+        group : root
+
+    - name: Stop apache2 service
+      service:
+        name: apache2
+        enabled: yes
+        state: stopped
+
+    - name: Install SSl certificates
+      command: certbot certonly --standalone -d "{{cluster_name}}-{{rootdns}}" creates="/etc/letsencrypt/live/{{cluster_name}}-{{rootdns}}"
+
+    - name: Allow apache2 access to the dirs
+      file:
+        path: "{{crawlerapi_path}}"
+        recurse: yes
+        owner: www-data
+        group: www-data
+
+    - file:
+        remote_src: yes
+        src: /etc/apache2/sites-available/crawlerapi.conf
+        dest: /etc/apache2/sites-enabled/crawlerapi.conf
+        owner: root
+        group: root
+        state: link
+
+    - name: Remove default site
+      file: path=/etc/apache2/sites-enabled/000-default.conf state=absent
+
+    - name: Enable and restart apache2 service
+      service:
+        name: apache2
+        enabled: yes
+        state: restarted
+
+
+#    - debug:
+#        msg: "{{item}}"
+#      with_items: "{{stat_result.results}}"
+#      when: item.stat.exists == True
+
+

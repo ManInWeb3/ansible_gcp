@@ -1,0 +1,10 @@
+---
+mysql_address: 
+mysql_rootuser: 
+mysql_rootpassword: 
+
+mysql_dialerdb: "{{cluster_name}}-DialerDB"
+mysql_asteriskdb: "{{cluster_name}}-AsteriskConf"
+
+mysql_user: "{{cluster_name}}_user"
+mysql_password: "Zaq1Xsw2{{cluster_name}}"

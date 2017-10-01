@@ -1,0 +1,106 @@
+---
+- name: Install and configure crawler and waitonhold
+  hosts: gce_instances_ips
+  become: yes
+  become_method: sudo
+  vars:
+    crawlerwaitonhold_path: /home/crawler-waitonhold_asterisk
+    asterisk_paths:
+      - /etc/asterisk
+      - /var/lib/asterisk
+    asterisklocal_paths:
+      - /usr/local/vm/TESTS
+      - /usr/local/vm/kaldi
+      - /usr/local/vm/asteriskscripts
+      - /usr/local/vm/vocabulary
+      - /usr/local/vm/conn.php
+      - /usr/local/vm/dial-crawl_verify.py
+      - /usr/local/vm/dial-waitonhold.py
+      - /usr/local/vm/termcolor.py
+      - /usr/local/vm/transcribeCrawler.py
+      - /usr/local/vm/vm.py
+  vars_files:
+    - ./vars/ssh
+    - ./vars/vm
+  tasks:
+
+    - copy: src=/home/ANSIBLE/.ssh/id_rsa dest=/home/ansible/.ssh/id_rsa
+        owner=ansible group=ansible mode=0600
+
+# ---- Clone and install Crawler and WaitOnHold -------
+    - file:
+        path: "{{crawlerwaitonhold_path}}"
+        state: directory
+        mode: 0777
+
+    - name: Clone CrawlerAPI repository
+      git:
+        repo: "{{git_crawlerwaitonhold}}"
+        dest: "{{crawlerwaitonhold_path}}"
+        update: yes
+        version: "{{ crawlerwaitonhold_branch }}"
+        key_file: /home/ansible/.ssh/id_rsa
+        accept_hostkey: yes
+
+    - name: Allow asterisk access to the dirs
+      file:
+        path: "{{crawlerwaitonhold_path}}"
+        recurse: yes
+        owner: asterisk
+        group: asterisk
+
+    - name: rename origianl {{item}} and Link them from the GIT repo
+      stat:
+        path: "{{item}}"
+      with_items: "{{asterisk_paths}}"
+      register: stat_result
+
+    - command: mv "{{item.item}}" "{{item.item}}.orig.{{ ansible_date_time.epoch }}"
+      with_items: "{{stat_result.results}}"
+      when: item.stat.exists == True
+
+# Symlink all asterisk pathes in the loop
+    - file:
+        remote_src: yes
+        src: "{{crawlerwaitonhold_path}}{{item}}"
+        dest: "{{item}}"
+        owner: asterisk
+        group: asterisk
+        state: link
+      with_items: "{{asterisk_paths}}"
+
+    - file:
+        path: /usr/local/vm
+        state: directory
+        mode: 0777
+
+    - file:
+        remote_src: yes
+        src: "{{crawlerwaitonhold_path}}{{item}}"
+        dest: "{{item}}"
+        owner: asterisk
+        group: asterisk
+        state: link
+      with_items: "{{asterisklocal_paths}}"
+
+    - name: Enable and restart asterisk service
+      service:
+        name: asterisk
+        enabled: yes
+        state: restarted
+
+    - name: Create working dirs for crawler
+      file:
+        path: "{{crawler_uploadsdir}}"
+        state: directory
+        mode: 0777
+
+    - file:
+        path: "{{crawler_confuploadsdir}}"
+        state: directory
+        mode: 0777
+
+    - file:
+        path: "{{crawler_logdir}}"
+        state: directory
+        mode: 0777

@@ -1,0 +1,6 @@
+---
+- include: create_gce.yml
+- include: configure_DB.yml
+- include: configure_etcvm.yml
+- include: configure_asterisk.yml
+- include: configure_crawlerapi.yml

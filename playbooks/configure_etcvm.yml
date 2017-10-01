@@ -1,0 +1,62 @@
+---
+- name: Configure or update /etc/vm dir on new hosts
+  hosts: gce_instances_ips
+  gather_facts: True
+  become: yes
+  become_method: sudo
+  vars:
+    host_public_ip: "{{hostvars[inventory_hostname]['ansible_ssh_host']}}"
+    crontasks:
+      - /cron.d/dial_crawl_verify
+      - /cron.d/dial_waitonhold
+      - /cron.d/Pmprocess_5sec
+      - /cron.d/post_classify
+      - /cron.d/transcribeCrawler
+      - /cron.d/vm_tools
+  vars_files:
+    - ./vars/ssh
+    - ./vars/mysql
+    - ./vars/git
+    - ./vars/vm
+    - ./vars/aws
+
+  tasks:
+
+    - name: Create /etc/vm dir
+      file:
+        path: /etc/vm
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+
+# INstall CONFIGS from templates
+
+    - name: Install cdr_mysql.conf config
+      template: src="{{path_crawlerinitandconfig}}/etc_templates/vm/cdr_mysql.conf.j2" dest=/etc/vm/cdr_mysql.conf
+
+    - name: Install sip_nat.conf config
+      template: src="{{path_crawlerinitandconfig}}/etc_templates/vm/sip_nat.conf.j2" dest=/etc/vm/sip_nat.conf
+
+    - name: Install extensions.conf config
+      template: src="{{path_crawlerinitandconfig}}/etc_templates/vm/extensions.conf.j2" dest=/etc/vm/extensions.conf
+
+    - name: Install conf.json config
+      template: src="{{path_crawlerinitandconfig}}/etc_templates/vm/conf.json.j2" dest=/etc/vm/conf.json
+
+    - name: Install vm.sh config
+      template: src="{{path_crawlerinitandconfig}}/etc_templates/vm/vm.sh.j2" dest=/etc/vm/vm.sh
+            owner=root group=root mode=0755
+
+    - copy: src="{{path_crawlerinitandconfig}}/etc_templates/vm/gcs-key.json" dest=/etc/vm/gcs-key.json
+            owner=root group=root mode=0644
+
+    - copy: src="{{path_crawlerinitandconfig}}/etc_templates/vm/conn.php" dest=/etc/vm/conn.php
+            owner=root group=root mode=0644
+
+    - copy: src="{{path_crawlerinitandconfig}}/etc_templates/vm/connCONF.php" dest=/etc/vm/connCONF.php
+            owner=root group=root mode=0644
+
+    - copy: src="{{path_crawlerinitandconfig}}/etc_templates/{{item}}" dest=/etc/{{item}}
+            owner=root group=root mode=0644
+      with_items: "{{crontasks}}"
